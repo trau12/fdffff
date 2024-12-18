@@ -7,7 +7,7 @@ import { Client } from '@stomp/stompjs';
 import { MessageType } from './types';
 
 const ROOM = "q";
-const SOCKET_URL = 'http://localhost:8080/chat';
+const SOCKET_URL = 'http://192.168.1.18:8080/chat';
 
 export default function SmartGardenDashboard() {
     const [client, setClient] = useState(null);
@@ -36,8 +36,9 @@ export default function SmartGardenDashboard() {
                 console.log('Connected to STOMP');
                 stompClient.subscribe(`/topic/messages/${ROOM}`, (message) => {
                     const data = JSON.parse(message.body);
+                    console.log('Received message:', data); // Thêm log để kiểm tra dữ liệu nhận được
                     if (data.messageType === MessageType.SENSOR) {
-                        setSensorData(data.message);
+                        setSensorData(data.message); // Cập nhật state
                     }
                 });
             },
@@ -45,16 +46,17 @@ export default function SmartGardenDashboard() {
                 console.error('STOMP error:', frame);
             }
         });
-
+    
         stompClient.activate();
         setClient(stompClient);
-
+    
         return () => {
             if (stompClient) {
                 stompClient.deactivate();
             }
         };
     }, []);
+    
 
     const handleDeviceControl = (device, state) => {
         if (!client) return;
@@ -81,11 +83,11 @@ export default function SmartGardenDashboard() {
                 {/* Sensor Cards */}
                 <div className="p-4 bg-white rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-2">Nhiệt độ</h3>
-                    <p className="text-3xl">{sensorData.sensors.nhietdo}°C</p>
+                    <p className="text-3xl">{sensorData.sensors.temp}°C</p>
                 </div>
                 <div className="p-4 bg-white rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-2">Độ ẩm không khí</h3>
-                    <p className="text-3xl">{sensorData.sensors.doam}%</p>
+                    <p className="text-3xl">{sensorData.sensors.hum}%</p>
                 </div>
                 <div className="p-4 bg-white rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-2">Độ ẩm đất</h3>
@@ -115,6 +117,13 @@ export default function SmartGardenDashboard() {
                 >
                     Đèn {sensorData.devices.dkden ? 'ON' : 'OFF'}
                 </button>
+                <button
+                    onClick={() => handleDeviceControl('light', !sensorData.devices.dkden)}
+                    className={`p-4 rounded-lg ${sensorData.devices.dkden ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
+                    >
+                    Đèn {sensorData.devices.dkden ? 'BẬT' : 'TẮT'}
+                </button>
+
                 <button
                     onClick={() => handleDeviceControl('exhaust_fan', !sensorData.devices.dkquathut)}
                     className={`p-4 rounded-lg ${sensorData.devices.dkquathut ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
