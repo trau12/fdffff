@@ -118,13 +118,6 @@ export default function SmartGardenDashboard() {
                     Đèn {sensorData.devices.dkden ? 'ON' : 'OFF'}
                 </button>
                 <button
-                    onClick={() => handleDeviceControl('light', !sensorData.devices.dkden)}
-                    className={`p-4 rounded-lg ${sensorData.devices.dkden ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
-                    >
-                    Đèn {sensorData.devices.dkden ? 'BẬT' : 'TẮT'}
-                </button>
-
-                <button
                     onClick={() => handleDeviceControl('exhaust_fan', !sensorData.devices.dkquathut)}
                     className={`p-4 rounded-lg ${sensorData.devices.dkquathut ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
                 >
