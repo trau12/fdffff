@@ -41,3 +41,4 @@ export interface ControlMessage {
     device: string;
     state: boolean;
 }
+
