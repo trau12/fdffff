@@ -24,12 +24,21 @@ const DEVICE_ICONS = {
   dkquathut: '🌪️',
   dkquatthoi: '💨',
   dkluoiche: '🌿',
-  dksolanh: '❄️'
+  dkmotor: '🏗️'
+};
+
+const getSensorIcon = (key) => {
+  return SENSOR_ICONS[key] || '📡'; // Fallback icon if not found
+};
+
+const getDeviceIcon = (key) => {
+  return DEVICE_ICONS[key] || '🔧'; // Fallback icon if not found
 };
 
 export default function SmartGardenDashboard() {
   const [manualMode, setManualMode] = useState(true);
   const [client, setClient] = useState(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [sensorData, setSensorData] = useState({
     sensors: {
       nhietdo: 0,
@@ -44,117 +53,97 @@ export default function SmartGardenDashboard() {
       dkquathut: false,
       dkquatthoi: false,
       dkluoiche: false,
-      dksolanh: false
+      dkmotor: false
     }
   });
   const [showInflux, setShowInflux] = useState(false);
 
   // WebSocket setup
+  // Handle WebSocket reconnection
   useEffect(() => {
-    const stompClient = new Client({
-        webSocketFactory: () => new SockJS(SOCKET_URL),
-        reconnectDelay: 5000, // Kết nối lại sau 5 giây nếu bị ngắt
-        onConnect: () => {
-          stompClient.subscribe(`/topic/messages/${ROOM}`, (message) => {
-            try {
-                const data = JSON.parse(message.body);
-                console.log('Received message:', data);
-        
-                if (data.messageType === MessageType.SENSOR || data.messageType === MessageType.CONTROL) {
-                    if (data.message && typeof data.message === 'object') {
-                        setSensorData((prev) => ({
-                            ...prev,
-                            ...data.message,
-                        }));
-                    } else {
-                        console.error("Invalid message structure:", data);
-                    }
-                } else {
-                    console.warn("Unhandled message type:", data.messageType);
-                }
-            } catch (error) {
-                console.error("Error parsing message:", error);
-            }
-          });
-        },
-        onStompError: (frame) => {
-            console.error('STOMP error:', frame.headers['message']);
-            console.error('Details:', frame.body);
-        },
-        onDisconnect: () => {
-            console.warn("STOMP client disconnected.");
-        }
+    const connectWebSocket = () => {
+      const stompClient = new Client({
+      webSocketFactory: () => new SockJS(SOCKET_URL),
+      onConnect: () => {
+        console.log('Connected to STOMP');
+        stompClient.subscribe(`/topic/messages/${ROOM}`, (message) => {
+          const data = JSON.parse(message.body);
+          console.log('Received message:', data);
+          if (data.messageType === MessageType.SENSOR) {
+            setSensorData(prevData => ({
+              sensors: { ...prevData.sensors, ...data.message.sensors },
+              devices: { ...prevData.devices, ...data.message.devices }
+            }));
+          }
+        });
+      },
+      onStompError: (frame) => {
+        console.error('STOMP error:', frame);
+      }
     });
 
-    stompClient.activate();
-    setClient(stompClient);
+    try {
+      stompClient.activate();
+      setClient(stompClient);
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
+      // Retry connection after delay
+      setTimeout(connectWebSocket, 3000);
+    }
 
     return () => {
-        if (stompClient) {
-            stompClient.deactivate();
-        }
+      if (stompClient) {
+        stompClient.deactivate();
+      }
     };
-  }, []);
+    };
 
+    connectWebSocket();
+  }, []);
 
   const handleModeChange = (mode) => {
     const isManual = mode === 'manual';
     setManualMode(isManual);
-
     const modeMessage = {
-        username: "user",
-        message: { isManualMode: isManual },
-        messageType: "CONTROL",
-        created: new Date().toISOString(),
+      username: "user",
+      message: { isManualMode: isManual },
+      messageType: "CONTROL",
+      created: new Date().toISOString(),
     };
-
-    if (!client || !client.connected) {
-        console.error("STOMP client is not connected.");
-        return;
-    }
-
-    try {
-        client.publish({
-            destination: `/app/chat/${ROOM}`,
-            body: JSON.stringify(modeMessage),
-        });
-        console.log(`Switched to ${isManual ? "manual" : "auto"} mode.`);
-    } catch (error) {
-        console.error("Error sending mode change message:", error);
-    }
+    client?.publish({
+      destination: `/app/chat/${ROOM}`,
+      body: JSON.stringify(modeMessage),
+    });
   };
 
   const handleDeviceControl = (device, state) => {
-    if (!manualMode) {
-        console.warn("Cannot control devices in auto mode.");
-        return;
-    }
-
-    if (!client || !client.connected) {
-        console.error("STOMP client is not connected.");
-        return;
-    }
+    if (!manualMode || !client) return;
 
     const controlMessage = {
-        username: "user",
-        message: {
-            [device]: state,
-        },
-        messageType: "CONTROL",
-        created: new Date().toISOString(),
+      username: "user",
+      message: {
+        [device]: state,
+      },
+      messageType: "CONTROL",
+      created: new Date().toISOString(),
     };
 
-    try {
-        client.publish({
-            destination: `/app/chat/${ROOM}`,
-            body: JSON.stringify(controlMessage),
-        });
-        console.log("Message sent:", controlMessage);
-    } catch (error) {
-        console.error("Error sending control message:", error);
-    }
+    client.publish({
+      destination: `/app/chat/${ROOM}`,
+      body: JSON.stringify(controlMessage),
+    });
   };
 
+  if (isConnecting) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-16 h-16 border-4 border-t-blue-500 border-r-transparent border-b-blue-500 border-l-transparent rounded-full animate-spin"></div>
+          <p className="text-lg font-medium text-gray-600">Đang kết nối...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen">
@@ -196,7 +185,7 @@ export default function SmartGardenDashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 className="mb-6 text-2xl font-bold text-center text-gray-800 md:text-3xl"
               >
-                Bảng Điều Khiển Vườn Thông Minh
+                Bảng điều khiển nhà kinh thông minh
               </motion.h1>
 
               <motion.div 
@@ -235,7 +224,7 @@ export default function SmartGardenDashboard() {
                     className="p-6 bg-white shadow-lg rounded-2xl backdrop-blur-sm bg-opacity-90"
                   >
                     <div className="flex flex-col items-center">
-                      <span className="mb-3 text-4xl animate-bounce">{SENSOR_ICONS[key]}</span>
+                      <span className="mb-3 text-4xl animate-bounce">{getSensorIcon(key)}</span>
                       <p className="text-sm font-medium text-gray-600">{key}</p>
                       <p className="mt-2 text-2xl font-bold text-blue-600">{value}</p>
                     </div>
@@ -265,7 +254,7 @@ export default function SmartGardenDashboard() {
                             ? 'bg-green-500 text-white shadow-lg' 
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                       >
-                        <span className="mb-2 text-3xl">{DEVICE_ICONS[key]}</span>
+                        <span className="mb-2 text-3xl">{getDeviceIcon(key)}</span>
                         <span className="text-sm font-medium">{key}</span>
                         <span className="mt-2 text-xs font-bold">{value ? 'BẬT' : 'TẮT'}</span>
                       </motion.button>
